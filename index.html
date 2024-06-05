@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        #userList {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* Creates a 3-column layout, change 3 to 4 for four columns */
+            gap: 10px; /* Spacing between grid items */
+        }
+        .form-check {
+            background: #f8f9fa; /* Light grey background */
+            border: 1px solid #ccc; /* Light grey border */
+            padding: 10px; /* Padding around each item */
+            border-radius: 5px; /* Rounded corners for each item */
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Attendance Management System</h1>
+        
+
+        <!-- Total Minutes Calculator -->
+        <h3 class="mt-4">Calculate Total Minutes</h3>
+        <div class="mb-4">
+            <label for="daysCount" class="form-label">Number of Days:</label>
+            <input type="number" id="daysCount" class="form-control" placeholder="Enter number of days" min="1">
+
+            <label for="startTime" class="form-label mt-2">Check-in Time:</label>
+            <input type="time" id="startTime" class="form-control" value="09:00">
+
+            <label for="endTime" class="form-label mt-2">Check-out Time:</label>
+            <input type="time" id="endTime" class="form-control" value="18:00">
+
+            <button onclick="calculateTotalMinutes()" class="btn btn-primary mt-3">Calculate</button>
+        </div>
+
+        <div id="totalMinutesResult" class="alert alert-info mt-2" style="display: none;"></div>
+
+
+
+        <!-- Refresh Users and Attendance -->
+        <div class="d-flex justify-content-between mb-4">
+            <button id="refreshUsers" class="btn btn-primary"><i class="fas fa-sync-alt"></i> Refresh Users</button>
+            <button id="refreshAttendance" class="btn btn-warning"><i class="fas fa-calendar-day"></i> Refresh Attendance</button>
+        </div>
+
+        <!-- Alert Messages -->
+        <div id="alertMessage" class="mb-4"></div>
+
+        <!-- Download Options -->
+        <h3 class="mt-4">Download Attendance</h3>
+        <div class="input-group mb-3">
+            <select class="form-select" id="timePeriod">
+                <option value="current-month">Current Month</option>
+                <option value="last-month">Last Month</option>
+                <option value="comprehensive">Comprehensive</option>
+            </select>
+            <button onclick="downloadAttendance()" class="btn btn-info"><i class="fas fa-download"></i> Download</button>
+        </div>
+
+        <!-- User List and Check Options -->
+        <h3>Users</h3>
+        <button onclick="selectAll(true)" class="btn btn-success">Check All</button>
+        <button onclick="selectAll(false)" class="btn btn-danger">Uncheck All</button>
+        <div id="userList" class="mb-4"></div>
+    </div>
+
+    <script>
+        // Populate user list and manage selections
+        async function getUsers() {
+            const response = await fetch('/get_users');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            showUsers(data)
+        }
+
+        async function showUsers(data) {
+            const userList = document.getElementById('userList');
+            userList.innerHTML = Object.entries(data.users).map(([userId, userName]) => `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" value="${userId}" id="user${userId}">
+                    <label class="form-check-label" for="user${userId}">
+                        ${userName} (ID: ${userId})
+                    </label>
+                </div>
+            `).join('');
+        }
+
+        async function fetchUsers() {
+            const response = await fetch('/refresh_users');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            showUsers(data);
+            displayAlert('User data updated successfully.');
+        }
+
+        async function refreshAttendance() {
+            const response = await fetch('/refresh-attendance', { method: 'GET' });
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            console.log(data);
+            displayAlert('Attendance data updated successfully.');
+        }
+
+        function displayAlert(message) {
+            const alertMessage = document.getElementById('alertMessage');
+            alertMessage.innerHTML = `<div class="alert alert-success">${message}</div>`;
+            setTimeout(() => alertMessage.innerHTML = '', 3000); // Message disappears after 3000ms
+        }
+
+        // Select or deselect all users
+        function selectAll(select) {
+            document.querySelectorAll('.form-check-input').forEach(checkbox => {
+                checkbox.checked = select;
+            });
+        }
+
+        // Download attendance for the selected time period
+        function downloadAttendance() {
+            const selectedPeriod = document.getElementById('timePeriod').value;
+            const selectedUsers = Array.from(document.querySelectorAll('.form-check-input:checked')).map(cb => cb.value).join(',');
+            window.location.href = `/download-attendance/${selectedPeriod}?user_ids=${selectedUsers}`;
+        }
+
+        // Initial data load
+        getUsers();
+
+        // Time Calculator
+        function calculateTotalMinutes() {
+            const days = parseInt(document.getElementById('daysCount').value, 10);
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (!days || !startTime || !endTime) {
+                alert("Please fill in all fields correctly.");
+                return;
+            }
+
+            const startTimeDate = new Date(`2021-01-01T${startTime}:00`);
+            const endTimeDate = new Date(`2021-01-01T${endTime}:00`);
+
+            // Calculate difference in hours, then convert to minutes
+            let minutesPerDay = (endTimeDate - startTimeDate) / 60000;
+
+            if (minutesPerDay < 0) {
+                // Assumes next day if end time is less than start time
+                minutesPerDay += 24 * 60;
+            }
+
+            const totalMinutes = minutesPerDay * days;
+            const totalMinutesResult = document.getElementById('totalMinutesResult');
+            totalMinutesResult.style.display = 'block';
+            totalMinutesResult.innerHTML = `Total minutes for ${days} days from ${startTime} to ${endTime} is: ${totalMinutes} minutes.`;
+        }
+
+
+        document.getElementById('refreshUsers').addEventListener('click', fetchUsers);
+        document.getElementById('refreshAttendance').addEventListener('click', refreshAttendance);
+    </script>
+</body>
+</html>
